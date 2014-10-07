@@ -1,0 +1,123 @@
+#!/usr/bin/python
+
+import socket
+import sys
+import datetime
+import select
+import xml.etree.ElementTree as ET
+
+
+def intToWeekday(num):
+    if num == 0: return 'Monday'
+    if num == 1: return 'Tuesday'
+    if num == 2: return 'Wednesday'
+    if num == 3: return 'Thursday'
+    if num == 4: return 'Friday'
+    if num == 5: return 'Saterday'
+    if num == 6: return 'Sunday'
+
+
+
+if len(sys.argv) < 2:
+    print 'Usage: noaa-forcast <zipcode>'
+    exit()
+
+print '\nLoading Weather for ' + sys.argv[1]
+
+s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+s.connect(('graphical.weather.gov', 80))
+
+date = str(datetime.date.today().year) + '-' + str(datetime.date.today().month) + '-' + str(datetime.date.today().day)
+
+
+query = 'whichClient=NDFDgenByDayMultiZipCode&'
+query += 'zipCodeList=' + sys.argv[1] + '&'
+query += 'format=24+hourly&'
+query += 'startDate=' + date +'&'
+query += 'numDays=7&'
+query += 'Unit=e&'
+query = query + 'Submit=Submit'
+
+s.send('GET /xml/SOAP_server/ndfdSOAPclientByDay.php?' + query + ' HTTP/1.0\r\n')
+s.send('Host: graphical.weather.gov\r\n')
+s.send('User-Agent: towens linux/x86_64\r\n')
+s.send('Connection: close\r\n')
+s.send('\r\n')
+
+data = ''
+
+readible = True
+
+line = '--------------------------------------------------------------------------------'
+
+while 1:
+    d = s.recv(4096)
+    if not d: break
+    data += d
+s.close()
+    
+#print data
+data = data[data.find('<?xml '):]
+
+root = ET.fromstring(data)
+data = root[1]
+
+location = data[0][1]
+print line
+print '\n\nLatitude: ' + location.attrib['latitude'] + \
+    ' Longitude: ' + location.attrib['longitude'] + '\n'
+
+
+parameters = data.find('parameters')
+
+if parameters.attrib['applicable-location'] != 'point1':
+    exit
+
+maxT = parameters[0]
+minT = parameters[1]
+cor  = parameters[2]
+info = parameters[3]
+
+maxTemps = []
+for child in maxT:
+    if child.tag != 'name':
+        maxTemps.append(child.text)
+minTemps = []
+for child in minT:
+    if child.tag != 'name':
+        minTemps.append(child.text)
+corAct = []
+for child in cor:
+    if child.tag != 'name':
+        corAct.append(child.text)
+
+infoStrings = []
+for child in info:
+    if child.tag != 'name':
+        infoStrings.append(child.attrib['weather-summary'])
+
+days = []    
+for i in range(7):
+    days.append(intToWeekday((i + datetime.date.today().weekday())%7))
+
+days[0] = 'Today'
+
+corI = 0
+for i in range(7):
+    print days[i]
+    print '\t' + str(infoStrings[i]) + \
+        '\n\tHigh of ' + str(maxTemps[i]) + \
+        ' | Low of ' + str(minTemps[i]) + \
+        '\n\tChange of Rain {0}% and {1}%'.format(str(corAct[corI]), str(corAct[corI+1]))
+    print ''
+    corI += 2
+
+
+print line
+
+
+
+
+
+
+    
